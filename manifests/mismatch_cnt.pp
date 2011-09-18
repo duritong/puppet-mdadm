@@ -1,5 +1,5 @@
 class mdadm::mismatch_cnt {
-  require rubygems::chronicle_duration
+  require rubygems::chronic_duration
 
   file{'/usr/local/sbin/fix_md_mismatch_cnt':
     source => 'puppet:///modules/mdadm/scripts/fix_md_mismatch_cnt',
