@@ -1,0 +1,51 @@
+#!/bin/env ruby
+require 'rubygems'
+require 'chronic_duration'
+
+def get_mismatch_cnts
+   Dir['/sys/block/md*'].inject({}) do |result,md|
+     if File.exist?(File.join(md,'md','mismatch_cnt'))
+       mismatch_cnt = File.read(File.join(md,'md','mismatch_cnt')).chomp.to_i
+       result[File.basename(md)] = mismatch_cnt if mismatch_cnt > 0
+     end
+     result
+   end
+end
+
+def get_duration(md)
+  if %x{cat /proc/mdstat | grep -A 3 #{md} | grep resync} =~ / finish=(.*) speed/
+    ChronicDuration::parse($1)
+  else
+    nil
+  end
+end
+
+def repair(md)
+  system "echo repair >> /sys/block/#{md}/md/sync_action"
+end
+
+def debug(str)
+  puts str if ARGV.include?('--debug')
+end
+
+def wait(duration)
+  debug("Repair in progress wait #{duration} seconds")
+  sleep duration
+end
+
+(1..5).each do |i|
+  get_mismatch_cnts.each do |md,cnt|
+    debug("Repair #{md} as it has mismatch_cnt #{cnt}")
+    repair(md)
+    sleep 2 # let the repair start before we check on duration
+    if (duration = get_duration(md)).nil?
+      debug("Could not parse estimate time to resync, will default to 600s")
+      duration = 600
+    end
+    wait(duration)
+    # retest
+    until (duration = get_duration(md)).nil?
+      wait(duration) 
+    end
+  end
+end
